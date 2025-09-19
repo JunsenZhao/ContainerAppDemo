@@ -65,7 +65,7 @@ if "selected_container" not in st.session_state: st.session_state.selected_conta
 
 # ---------- LOGIN ----------
 if st.session_state.role is None:
-    st.title("♻️ Reusable Container Demo")
+    st.title("♻️ Reusable Container App")
     st.subheader("Login")
     with st.form("login_form"):
         phone = st.text_input("Phone").strip()
@@ -93,6 +93,7 @@ if st.session_state.role is None:
                     st.error("Invalid operator credentials")
     st.stop()
 
+
 # ---------- CUSTOMER VIEW ----------
 if st.session_state.role == "Customer":
     users = load_users()
@@ -100,29 +101,70 @@ if st.session_state.role == "Customer":
     containers = load_containers()
     my_containers = containers[containers["owner"] == st.session_state.phone]
 
-    st.header(f"Customer Home ({st.session_state.phone})")
+    # ---------- CUSTOMER HEADER ----------
+    with st.sidebar:
+        st.markdown("## 👤 Customer Info")
+    
+        # Phone
+        st.markdown(f"**Phone:** `{st.session_state.phone}`")
+    
+        # Points button
+        if st.button(f"⭐ {user['points']} Points", key="points_button_sidebar"):
+            st.session_state.show_rewards = True
+            st.session_state.show_new_order = False
+            st.session_state.show_history = False
+    
+        # Navigation buttons
+        if st.button("🛒 New Order", key="new_order_sidebar"):
+            st.session_state.show_new_order = True
+            st.session_state.show_rewards = False
+            st.session_state.show_history = False
+        if st.button("📜 History", key="history_sidebar"):
+            st.session_state.show_history = True
+            st.session_state.show_rewards = False
+            st.session_state.show_new_order = False
+        st.markdown("---")
+    
+        # Logout
+        if st.button("🚪 Logout", key="logout_sidebar"):
+            st.session_state.role = None
+            st.session_state.phone = None
+            st.rerun()
 
-    # Points
-    st.subheader("💎 Points")
-    st.metric("Current Points", user["points"])
 
-    # Containers
-    st.subheader("📦 Containers in Possession")
-    if not my_containers.empty:
-        for _, c in my_containers.iterrows():
-            st.write(f"ID: {c['id']} | Status: {c['status']} | Hours: {c['hoursInUse']}")
+
+
+    st.markdown(f"## 👤 Customer Home - `{st.session_state.phone}`")
+
+    # Points Section
+    st.markdown("### 💎 My Points")
+    st.metric(label="Available Points", value=user["points"])
+
+    # Containers in Possession
+    st.divider()
+    st.markdown("### 📦 My Containers")
+    my_containers_active = my_containers[my_containers["status"] != "RETURNED"]
+    if not my_containers_active.empty:
+        cols = st.columns(2)
+        for i, (_, c) in enumerate(my_containers_active.iterrows()):
+            with cols[i % 2]:
+                with st.container(border=True):
+                    st.subheader(f"ID: {c['id']}")
+                    st.write(f"**Status:** {c['status']}")
+                    st.write(f"**Hours in use:** {c['hoursInUse']}")
+                    st.write(f"**Deposit:** ${c['deposit']:.2f}")
     else:
-        st.info("No containers in possession.")
+        st.info("You don’t have any containers right now.")
 
     # New Order
-    st.subheader("🛒 New Order")
-    num = st.number_input("Number of containers", 1, 5, 1, key="num_order")
-    if st.button("Place Order"):
+    st.divider()
+    st.markdown("### 🛒 Place a New Order")
+    num = st.number_input("Select number of containers", 1, 5, 1, key="num_order")
+    if st.button("✅ Confirm Order"):
         containers = load_containers()
-        # Select clean containers
         available = containers[containers["status"] == "CLEAN"].head(num)
         if len(available) < num:
-            st.error("Not enough clean containers available!")
+            st.error("⚠️ Not enough clean containers available!")
         else:
             for idx in available.index:
                 containers.at[idx, "status"] = "IN_USE"
@@ -132,46 +174,56 @@ if st.session_state.role == "Customer":
                 history.append(st.session_state.phone)
                 containers.at[idx, "history"] = history
             save_containers(containers)
-            st.success("Order placed!")
+            st.success("🎉 Order placed successfully!")
             st.rerun()
 
+    # ---------- HISTORY ----------
+    with st.expander("📜 Order History", expanded=st.session_state.get("show_history", False)):
+        my_history = containers[containers["history"].apply(lambda h: st.session_state.phone in h)]
+        if not my_history.empty:
+            st.table(my_history[["id", "hoursInUse"]])
+        else:
+            st.info("No history yet.")
 
     # Deposits
-    st.subheader("💰 Deposits")
-    if not my_containers.empty:
-        deposits = my_containers[my_containers["deposit"] > 0]
-        if not deposits.empty:
-            st.write(deposits[["id", "deposit"]])
-            st.write(f"Total deposit: ${deposits['deposit'].sum():.2f}")
-        else:
-            st.info("No active deposits.")
+    st.divider()
+    st.markdown("### 💰 My Deposits")
+    deposits = my_containers_active[my_containers_active["deposit"] > 0]
+    if not deposits.empty:
+        total = deposits["deposit"].sum()
+        st.metric("Total Deposit", f"${total:.2f}")
+        with st.expander("See details"):
+            for _, c in deposits.iterrows():
+                st.write(f"🆔 {c['id']} → ${c['deposit']:.2f}")
     else:
-        st.info("No containers to show deposits.")
+        st.info("No active deposits at the moment.")
 
-    # History
-    st.subheader("📜 History")
-    my_history = containers[containers["history"].apply(lambda h: st.session_state.phone in h)]
-    st.write(my_history[["id"]])
 
-    # Redeem Rewards
-    st.subheader("🎁 Redeem Rewards")
+    # Rewards
+    st.divider()
+    st.markdown('<a id="rewards"></a>', unsafe_allow_html=True)
+    st.markdown("### 🎁 Redeem Rewards")
     rewards = {"Free Coffee": 1000, "Discount $5": 2000, "Free Snack": 500}
-    for r, cost in rewards.items():
-        if st.button(f"Redeem {r} ({cost} pts)"):
-            users = load_users()
-            current_points = users.loc[users["phone"] == st.session_state.phone, "points"].values[0]
-            if current_points >= cost:
-                users.loc[users["phone"] == st.session_state.phone, "points"] -= cost
-                save_users(users)
-                st.success(f"Redeemed {r}!")
-            else:
-                st.error("Not enough points")
+    cols = st.columns(len(rewards))
+    for i, (r, cost) in enumerate(rewards.items()):
+        with cols[i]:
+            if st.button(f"  Redeem a {r}   ({cost} pts)"):
+                users = load_users()
+                current_points = users.loc[users["phone"] == st.session_state.phone, "points"].values[0]
+                if current_points >= cost:
+                    users.loc[users["phone"] == st.session_state.phone, "points"] -= cost
+                    save_users(users)
+                    st.success(f"🎉 You redeemed {r}! Check your delivery app.")
+                else:
+                    st.error("Not enough points ❌")
 
     # Logout
-    if st.button("Logout"):
+    st.divider()
+    if st.button("🚪 Logout"):
         st.session_state.role = None
         st.session_state.phone = None
         st.rerun()
+
 
 # ---------- OPERATOR VIEW ----------
 if st.session_state.role == "Operator":
