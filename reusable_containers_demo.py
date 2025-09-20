@@ -330,8 +330,7 @@ if st.session_state.role == "Customer":
 if st.session_state.role == "Operator":
     st.header(f"Operator Home ({st.session_state.phone})")
     containers = load_containers()
-    search = st.text_input("Search Container ID")
-    results = containers[containers["id"].str.contains(search)] if search else containers
+
 
     # Redistribute button -> opens redistribute page
     if st.button("🔁 Redistribute Containers"):
@@ -377,6 +376,8 @@ if st.session_state.role == "Operator":
         st.button("⬅️ Back to Operator Home", on_click=lambda: st.session_state.update({"page": "home"}))
         st.stop()
 
+    search = st.text_input("Search Container ID")
+    results = containers[containers["id"].str.contains(search)] if search else containers
     # normal operator view (container list + detail)
     for _, c in results.iterrows():
         if st.button(f"{c['id']} | {c['status']}"):
