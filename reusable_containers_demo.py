@@ -331,13 +331,21 @@ if st.session_state.role == "Operator":
     st.header(f"Operator Home ({st.session_state.phone})")
     containers = load_containers()
 
+    # Container summary by status
+    st.subheader("📦 Container Summary")
+    status_counts = containers["status"].value_counts()
+    for status in ["CLEAN", "DISTRIBUTED", "IN_USE", "RETURNED"]:
+        count = status_counts.get(status, 0)
+        st.metric(f"{status} Containers", count)
+    st.divider()
 
-    # Redistribute button -> opens redistribute page
+
+
+    # -------------------- Redistribute Containers --------------------
     if st.button("🔁 Redistribute Containers"):
         st.session_state.page = "redistribute_page"
         st.rerun()
 
-    # Redistribute page
     if st.session_state.get("page") == "redistribute_page":
         st.header("Redistribute Requests")
         requests = load_requests()
@@ -346,7 +354,7 @@ if st.session_state.role == "Operator":
             for idx, req in open_requests.iterrows():
                 rest_phone = req["restaurant_phone"]
                 rest_name = req["restaurant_name"]
-                num_req = num_req = int(float(req["num_requested"]))
+                num_req = int(float(req["num_requested"]))
 
                 with st.container(border=True):
                     st.write(f"**Restaurant:** {rest_name} ({rest_phone})")
@@ -360,12 +368,10 @@ if st.session_state.role == "Operator":
                             for cidx in available.index:
                                 containers.at[cidx, "status"] = "DISTRIBUTED"
                                 containers.at[cidx, "owner"] = rest_phone
-                                # record history
                                 history = containers.at[cidx, "history"]
                                 history.append(rest_phone)
                                 containers.at[cidx, "history"] = history
                             save_containers(containers)
-                            # mark request fulfilled
                             requests.at[idx, "status"] = "FULFILLED"
                             save_requests(requests)
                             st.success(f"Distributed {num_req} containers to {rest_name}")
@@ -376,14 +382,47 @@ if st.session_state.role == "Operator":
         st.button("⬅️ Back to Operator Home", on_click=lambda: st.session_state.update({"page": "home"}))
         st.stop()
 
+    # -------------------- Add Containers Page --------------------
+    if st.session_state.get("page") == "add_container_page":
+        st.header("Add New Containers")
+        num_to_add = st.number_input("Number of containers to add", min_value=1, max_value=100, value=1)
+        if st.button("✅ Add Containers"):
+            containers = load_containers()
+            for _ in range(num_to_add):
+                new_id = f"C{random.randint(100,999)}"
+                new = {"id": new_id, "status": "CLEAN", "hoursInUse": 0,
+                       "timesUsed": 0, "owner": "", "deposit": 0.0, "history": []}
+                containers = pd.concat([containers, pd.DataFrame([new])], ignore_index=True)
+            save_containers(containers)
+            st.success(f"Added {num_to_add} containers!")
+            st.session_state.page = "home"
+            st.rerun()
+        st.button("⬅️ Back to Home", on_click=lambda: st.session_state.update({"page": "home"}))
+        st.stop()
+
+    # -------------------- Container Search --------------------
     search = st.text_input("Search Container ID")
     results = containers[containers["id"].str.contains(search)] if search else containers
-    # normal operator view (container list + detail)
-    for _, c in results.iterrows():
-        if st.button(f"{c['id']} | {c['status']}"):
-            st.session_state.selected_container = c['id']
-            st.rerun()
 
+    # -------------------- Containers by Status (4 Columns) --------------------
+    st.subheader("Manage Containers")
+    col_clean, col_distributed, col_inuse, col_returned = st.columns(4)
+    status_columns = {
+        "CLEAN": col_clean,
+        "DISTRIBUTED": col_distributed,
+        "IN_USE": col_inuse,
+        "RETURNED": col_returned
+    }
+
+    for status, col in status_columns.items():
+        col.markdown(f"**{status}**")
+        status_containers = results[results["status"] == status]
+        for _, c in status_containers.iterrows():
+            if col.button(f"{c['id']}", key=c['id']):
+                st.session_state.selected_container = c['id']
+                st.rerun()
+
+    # -------------------- Container Details & Status Update --------------------
     if st.session_state.selected_container:
         cid = st.session_state.selected_container
         container = containers[containers["id"] == cid].iloc[0]
@@ -391,7 +430,6 @@ if st.session_state.role == "Operator":
         st.write(container)
 
         current_status = container["status"]
-        # include DISTRIBUTED in status transitions
         if current_status == "CLEAN":
             next_status_options = ["DISTRIBUTED", "IN_USE"]
         elif current_status == "DISTRIBUTED":
@@ -410,7 +448,6 @@ if st.session_state.role == "Operator":
 
         if st.button("Update Status"):
             idx = containers[containers["id"] == cid].index[0]
-            # credit points only if moving to RETURNED and returned as cleaned
             if next_status == "RETURNED" and container["owner"]:
                 if returned_opt == "Returned Cleaned":
                     users = load_users()
@@ -419,7 +456,6 @@ if st.session_state.role == "Operator":
                     if owner in users["phone"].values:
                         users.loc[users["phone"] == owner, "points"] += pts
                         save_users(users)
-            # reset container only when setting to CLEAN
             if next_status == "CLEAN":
                 containers.at[idx, "owner"] = ""
                 containers.at[idx, "deposit"] = 0.0
@@ -431,21 +467,19 @@ if st.session_state.role == "Operator":
             st.session_state.selected_container = None
             st.rerun()
 
-    if st.button("Add Container"):
-        new_id = f"C{random.randint(100,999)}"
-        new = {"id": new_id, "status": "CLEAN", "hoursInUse": 0,
-               "timesUsed": 0, "owner": "", "deposit": 0.0, "history": []}
-        containers = pd.concat([containers, pd.DataFrame([new])], ignore_index=True)
-        save_containers(containers)
-        st.success(f"Added {new_id}")
+    # -------------------- Add Container Button --------------------
+    if st.button("➕ Add Containers"):
+        st.session_state.page = "add_container_page"
         st.rerun()
 
+    # -------------------- Logout --------------------
     if st.button("Logout"):
         st.session_state.role = None
         st.session_state.phone = None
         st.session_state.selected_container = None
         st.session_state.page = "home"
         st.rerun()
+
 
 
 
