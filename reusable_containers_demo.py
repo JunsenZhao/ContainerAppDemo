@@ -10,6 +10,7 @@ OPERATORS_FILE = "operators.csv"
 RESTAURANTS_FILE = "restaurants.csv"
 CONTAINERS_FILE = "containers.csv"
 ORDERS_FILE = "orders.csv"
+REQUESTS_FILE = "requests.csv"   # new file for restaurant container requests
 
 # ---------- INITIALIZATION ----------
 def init_csv():
@@ -23,6 +24,12 @@ def init_csv():
             {"phone": "90001111", "password": "op123"},
             {"phone": "90002222", "password": "op456"}
         ]).to_csv(OPERATORS_FILE, index=False)
+    if not os.path.exists(RESTAURANTS_FILE):
+        # If restaurants.csv already exists in your workspace, this won't overwrite.
+        pd.DataFrame([
+            {"phone": "80001111", "password": "restA", "name": "Restaurant A"},
+            {"phone": "80002222", "password": "restB", "name": "Restaurant B"}
+        ]).to_csv(RESTAURANTS_FILE, index=False)
     if not os.path.exists(CONTAINERS_FILE):
         pd.DataFrame([
             {"id": "C001", "status": "CLEAN", "hoursInUse": 0, "timesUsed": 0,
@@ -31,6 +38,9 @@ def init_csv():
     if not os.path.exists(ORDERS_FILE):
         pd.DataFrame(columns=["customer_phone", "restaurant_phone", "order_text", "status", "containers"]) \
           .to_csv(ORDERS_FILE, index=False)
+    if not os.path.exists(REQUESTS_FILE):
+        # requests: restaurant_phone, num_requested, status (OPEN / FULFILLED), created_at
+        pd.DataFrame(columns=["restaurant_phone", "num_requested", "status", "created_at"]).to_csv(REQUESTS_FILE, index=False)
 
 init_csv()
 
@@ -52,13 +62,25 @@ def load_restaurants():
     return df
 
 def load_orders():
+    if not os.path.exists(ORDERS_FILE):
+        pd.DataFrame(columns=["customer_phone", "restaurant_phone", "order_text", "status", "containers"]).to_csv(ORDERS_FILE, index=False)
     return pd.read_csv(ORDERS_FILE, dtype=str)
 
 def save_orders(df):
     df.to_csv(ORDERS_FILE, index=False)
 
+def load_requests():
+    if not os.path.exists(REQUESTS_FILE):
+        pd.DataFrame(columns=["restaurant_phone", "num_requested", "status", "created_at"]).to_csv(REQUESTS_FILE, index=False)
+    df = pd.read_csv(REQUESTS_FILE, dtype=str).applymap(lambda x: x.strip() if isinstance(x, str) else x)
+    return df
+
+def save_requests(df):
+    df.to_csv(REQUESTS_FILE, index=False)
+
 def load_containers():
     df = pd.read_csv(CONTAINERS_FILE, dtype=str).applymap(lambda x: x.strip() if isinstance(x, str) else x)
+    # ensure columns types
     df["hoursInUse"] = df["hoursInUse"].astype(int)
     df["timesUsed"] = df["timesUsed"].astype(int)
     df["deposit"] = df["deposit"].astype(float)
@@ -77,6 +99,8 @@ def calc_points(hours, clean=True):
 if "role" not in st.session_state: st.session_state.role = None
 if "phone" not in st.session_state: st.session_state.phone = None
 if "selected_container" not in st.session_state: st.session_state.selected_container = None
+# page state used for simple multi-page navigation
+if "page" not in st.session_state: st.session_state.page = "home"
 
 # ---------- LOGIN ----------
 if st.session_state.role is None:
@@ -94,6 +118,7 @@ if st.session_state.role is None:
                 if not match.empty:
                     st.session_state.role = "Customer"
                     st.session_state.phone = phone
+                    st.session_state.page = "home"
                     st.rerun()
                 else:
                     st.error("Invalid customer credentials")
@@ -103,6 +128,7 @@ if st.session_state.role is None:
                 if not match.empty:
                     st.session_state.role = "Operator"
                     st.session_state.phone = phone
+                    st.session_state.page = "home"
                     st.rerun()
                 else:
                     st.error("Invalid operator credentials")
@@ -112,12 +138,15 @@ if st.session_state.role is None:
                 if not match.empty:
                     st.session_state.role = "Restaurant"
                     st.session_state.phone = phone
+                    st.session_state.page = "home"
                     st.rerun()
                 else:
                     st.error("Invalid restaurant credentials")
     st.stop()
 
+# -----------------------
 # ---------- CUSTOMER VIEW ----------
+# -----------------------
 if st.session_state.role == "Customer":
     users = load_users()
     user = users[users["phone"] == st.session_state.phone].iloc[0]
@@ -133,12 +162,13 @@ if st.session_state.role == "Customer":
         if st.button("🚪 Logout", key="logout_sidebar"):
             st.session_state.role = None
             st.session_state.phone = None
+            st.session_state.page = "home"
             st.rerun()
 
     st.markdown(f"## 👤 Customer Home - `{st.session_state.phone}`")
 
     # Points + Rewards button
-    col1, col2 = st.columns([1, 1])
+    col1, col2 = st.columns([2, 1])
     with col1:
         st.metric("💎 Available Points", user["points"])
     with col2:
@@ -162,14 +192,43 @@ if st.session_state.role == "Customer":
                         st.error("Not enough points ❌")
         st.divider()
 
+        # Spin wheel simplified (directly apply points or voucher)
+        st.subheader("🎡 Spin the Wheel")
+        spin_cost = 100
+        wheel_segments = [
+            "+10 Points", "Restaurant Voucher", "+20 Points", "Restaurant Voucher", "+50 Points",
+            "Restaurant Voucher", "+100 Points", "Restaurant Voucher", "+200 Points", "Restaurant Voucher"
+        ]
+
+        if st.button(f"🎰 Spin Now! (cost {spin_cost} pts)"):
+            current_points = users.loc[users["phone"] == st.session_state.phone, "points"].values[0]
+            if current_points >= spin_cost:
+                # Deduct cost
+                users.loc[users["phone"] == st.session_state.phone, "points"] -= spin_cost
+                save_users(users)
+
+                prize = random.choice(wheel_segments)
+                if "Points" in prize:
+                    amount = int(prize.replace("+", "").replace(" Points", ""))
+                    users.loc[users["phone"] == st.session_state.phone, "points"] += amount
+                    save_users(users)
+                    st.success(f"🎉 You won {amount} points! They’ve been added to your balance.")
+                else:
+                    st.success("🎉 You won a Restaurant Voucher! (voucher not tracked in this demo)")
+            else:
+                st.error("Not enough points to spin ❌")
+
+        st.divider()
         st.button("⬅️ Back to Home", on_click=lambda: st.session_state.update({"page":"home"}))
         st.stop()
 
     if st.session_state.get("page", "home") == "home":
-        # Big button to go to order page
-        if st.button("🛒 Place New Order", key="new_order_button"):
-            st.session_state.page = "order_page"
-            st.rerun()
+        # Big button to go to order page (visual centered)
+        col_l, col_c, col_r = st.columns([1, 3, 1])
+        with col_c:
+            if st.button("🛒 Place New Order", key="new_order_button", help="Place a new order"):
+                st.session_state.page = "order_page"
+                st.rerun()
 
     if st.session_state.get("page") == "order_page":
         st.markdown("## 📝 New Order")
@@ -201,7 +260,9 @@ if st.session_state.role == "Customer":
     st.divider()
     st.markdown("### 📜 Order History")
     # --- Pending Orders as cards ---
+    orders = load_orders()  # reload to ensure fresh
     customer_orders = orders[orders["customer_phone"]==st.session_state.phone]
+    restaurants = load_restaurants()
 
     pending_orders = customer_orders[customer_orders["status"] == "PENDING"]
     if not pending_orders.empty:
@@ -216,7 +277,7 @@ if st.session_state.role == "Customer":
     else:
         st.info("No pending orders.")
 
-
+    # Full history in expander (latest first)
     if not customer_orders.empty:
         customer_orders = customer_orders.iloc[::-1]
         with st.expander("View all orders"):
@@ -263,13 +324,60 @@ if st.session_state.role == "Customer":
         st.info("No active deposits at the moment.")
 
 
+# -----------------------
 # ---------- OPERATOR VIEW ----------
+# -----------------------
 if st.session_state.role == "Operator":
     st.header(f"Operator Home ({st.session_state.phone})")
     containers = load_containers()
     search = st.text_input("Search Container ID")
     results = containers[containers["id"].str.contains(search)] if search else containers
 
+    # Redistribute button -> opens redistribute page
+    if st.button("🔁 Redistribute Containers"):
+        st.session_state.page = "redistribute_page"
+        st.rerun()
+
+    # Redistribute page
+    if st.session_state.get("page") == "redistribute_page":
+        st.header("Redistribute Requests")
+        requests = load_requests()
+        open_requests = requests[requests["status"] == "OPEN"].iloc[::-1]  # latest first
+        if not open_requests.empty:
+            for idx, req in open_requests.iterrows():
+                rest_phone = req["restaurant_phone"]
+                rest_name = req["restaurant_name"]
+                num_req = num_req = int(float(req["num_requested"]))
+
+                with st.container(border=True):
+                    st.write(f"**Restaurant:** {rest_name} ({rest_phone})")
+                    st.write(f"**Requested:** {num_req} containers")
+                    if st.button(f"Distribute to {rest_name} (req {idx})"):
+                        containers = load_containers()
+                        available = containers[containers["status"] == "CLEAN"].head(num_req)
+                        if len(available) < num_req:
+                            st.error("Not enough clean containers available to fulfill request.")
+                        else:
+                            for cidx in available.index:
+                                containers.at[cidx, "status"] = "DISTRIBUTED"
+                                containers.at[cidx, "owner"] = rest_phone
+                                # record history
+                                history = containers.at[cidx, "history"]
+                                history.append(rest_phone)
+                                containers.at[cidx, "history"] = history
+                            save_containers(containers)
+                            # mark request fulfilled
+                            requests.at[idx, "status"] = "FULFILLED"
+                            save_requests(requests)
+                            st.success(f"Distributed {num_req} containers to {rest_name}")
+                            st.rerun()
+        else:
+            st.info("No open redistribute requests.")
+
+        st.button("⬅️ Back to Operator Home", on_click=lambda: st.session_state.update({"page": "home"}))
+        st.stop()
+
+    # normal operator view (container list + detail)
     for _, c in results.iterrows():
         if st.button(f"{c['id']} | {c['status']}"):
             st.session_state.selected_container = c['id']
@@ -282,12 +390,17 @@ if st.session_state.role == "Operator":
         st.write(container)
 
         current_status = container["status"]
+        # include DISTRIBUTED in status transitions
         if current_status == "CLEAN":
-            next_status_options = ["IN_USE"]
+            next_status_options = ["DISTRIBUTED", "IN_USE"]
+        elif current_status == "DISTRIBUTED":
+            next_status_options = ["IN_USE", "CLEAN"]
         elif current_status == "IN_USE":
             next_status_options = ["RETURNED"]
         elif current_status == "RETURNED":
             next_status_options = ["CLEAN"]
+        else:
+            next_status_options = ["CLEAN", "IN_USE", "RETURNED"]
 
         next_status = st.selectbox("Next Status", next_status_options)
         returned_opt = None
@@ -296,13 +409,16 @@ if st.session_state.role == "Operator":
 
         if st.button("Update Status"):
             idx = containers[containers["id"] == cid].index[0]
+            # credit points only if moving to RETURNED and returned as cleaned
             if next_status == "RETURNED" and container["owner"]:
                 if returned_opt == "Returned Cleaned":
                     users = load_users()
                     pts = calc_points(container["hoursInUse"], clean=True)
                     owner = container["owner"]
-                    users.loc[users["phone"] == owner, "points"] += pts
-                    save_users(users)
+                    if owner in users["phone"].values:
+                        users.loc[users["phone"] == owner, "points"] += pts
+                        save_users(users)
+            # reset container only when setting to CLEAN
             if next_status == "CLEAN":
                 containers.at[idx, "owner"] = ""
                 containers.at[idx, "deposit"] = 0.0
@@ -327,12 +443,52 @@ if st.session_state.role == "Operator":
         st.session_state.role = None
         st.session_state.phone = None
         st.session_state.selected_container = None
+        st.session_state.page = "home"
         st.rerun()
+
+
+
 # ---------- RESTAURANT VIEW ----------
 if st.session_state.role == "Restaurant":
     restaurants = load_restaurants()
     my_rest = restaurants[restaurants["phone"] == st.session_state.phone].iloc[0]
     st.header(f"🍴 Restaurant Home - {my_rest['name']}")
+
+    containers = load_containers()
+
+    # Show restaurant's container stock (distributed containers)
+    my_stock = containers[(containers["status"] == "DISTRIBUTED") & (containers["owner"] == st.session_state.phone)]
+    st.metric("📦 Containers Available", len(my_stock))
+
+    # Request more containers button
+    if st.session_state.get("page") == "request_page":
+        st.subheader("➕ Request More Containers")
+        num_req = st.number_input("Enter number of containers needed", min_value=1, step=1)
+        if st.button("📤 Submit Request"):
+            if "requests.csv" not in os.listdir():
+                pd.DataFrame(columns=["restaurant_phone", "restaurant_name", "num"]).to_csv("requests.csv", index=False)
+            requests = pd.read_csv("requests.csv")
+            new_req = pd.DataFrame([{
+                "restaurant_phone": st.session_state.phone,
+                "restaurant_name": my_rest["name"],
+                "num": int(num_req)
+            }])
+            requests = pd.concat([requests, new_req], ignore_index=True)
+            requests.to_csv("requests.csv", index=False)
+            st.session_state.page = "request_sent"
+            st.rerun()
+        st.button("⬅️ Back to Home", on_click=lambda: st.session_state.update({"page":"home"}))
+        st.stop()
+
+    if st.session_state.get("page") == "request_sent":
+        st.markdown("## ✅ Your request has been sent!")
+        st.markdown("Operator will distribute containers to you soon.")
+        st.button("⬅️ Back to Home", on_click=lambda: st.session_state.update({"page":"home"}))
+        st.stop()
+
+    if st.button("📦 Request More", key="req_btn"):
+        st.session_state.page = "request_page"
+        st.rerun()
 
     orders = load_orders()
     my_orders = orders[(orders["restaurant_phone"] == st.session_state.phone)].iloc[::-1]  # latest first
@@ -346,11 +502,13 @@ if st.session_state.role == "Restaurant":
                 st.write(f"**Customer:** {order['customer_phone']}")
                 st.write(f"**Order:** {order['order_text']}")
                 num = st.number_input(f"Containers for order {idx}", 1, 5, 1, key=f"cont_{idx}")
+
                 if st.button(f"✅ Mark Delivered (Order {idx})"):
-                    containers = load_containers()
-                    available = containers[containers["status"] == "CLEAN"].head(num)
+                    available = containers[(containers["status"] == "DISTRIBUTED") & 
+                                           (containers["owner"] == st.session_state.phone)].head(num)
+
                     if len(available) < num:
-                        st.error("Not enough clean containers available!")
+                        st.error("Not enough distributed containers in your stock!")
                     else:
                         for cidx in available.index:
                             containers.at[cidx, "status"] = "IN_USE"
@@ -363,7 +521,7 @@ if st.session_state.role == "Restaurant":
                         orders.at[idx, "status"] = "DELIVERED"
                         orders.at[idx, "containers"] = str(num)
                         save_orders(orders)
-                        st.success("Order delivered and containers assigned!")
+                        st.success("Order delivered using your distributed containers!")
                         st.rerun()
     else:
         st.info("No pending orders.")
