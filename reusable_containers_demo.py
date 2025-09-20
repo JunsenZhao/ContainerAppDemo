@@ -500,20 +500,22 @@ if st.session_state.role == "Restaurant":
         st.subheader("➕ Request More Containers")
         num_req = st.number_input("Enter number of containers needed", min_value=1, step=1)
         if st.button("📤 Submit Request"):
-            if "requests.csv" not in os.listdir():
-                pd.DataFrame(columns=["restaurant_phone", "restaurant_name", "num"]).to_csv("requests.csv", index=False)
-            requests = pd.read_csv("requests.csv")
+            requests_file = "requests.csv"
+            if not os.path.exists(requests_file):
+                pd.DataFrame(columns=["restaurant_phone", "restaurant_name", "num_requested", "status", "created_at"]).to_csv(requests_file, index=False)
+            requests = pd.read_csv(requests_file)
             new_req = pd.DataFrame([{
                 "restaurant_phone": st.session_state.phone,
                 "restaurant_name": my_rest["name"],
-                "num": int(num_req)
+                "num_requested": int(num_req),
+                "status": "OPEN",
+                "created_at": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
             }])
             requests = pd.concat([requests, new_req], ignore_index=True)
-            requests.to_csv("requests.csv", index=False)
+            requests.to_csv(requests_file, index=False)
             st.session_state.page = "request_sent"
             st.rerun()
-        st.button("⬅️ Back to Home", on_click=lambda: st.session_state.update({"page":"home"}))
-        st.stop()
+
 
     if st.session_state.get("page") == "request_sent":
         st.markdown("## ✅ Your request has been sent!")
