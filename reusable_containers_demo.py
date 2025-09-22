@@ -111,7 +111,7 @@ if "page" not in st.session_state: st.session_state.page = "home"
 # ---------- LOGIN ----------
 if st.session_state.role is None:
     # Replace title with centralised image
-    img1_path = Path(r"C:\Users\zhaoj\OneDrive\Documents\NUS High 2025\BL6131\Project\AppDemo\image1.png").absolute()
+    img1_path = Path(r"image1.png").absolute()
     img1_base64 = image_to_base64(img1_path)
 
     st.markdown(
@@ -162,7 +162,7 @@ if st.session_state.role is None:
                     st.error("Invalid restaurant credentials")
 
     # Add second image below login form
-    img2_path = Path(r"C:\Users\zhaoj\OneDrive\Documents\NUS High 2025\BL6131\Project\AppDemo\image2.png").absolute()
+    img2_path = Path(r"image2.png").absolute()
     img2_base64 = image_to_base64(img2_path)
 
     st.markdown(
@@ -192,7 +192,7 @@ if st.session_state.role == "Customer":
 
     # ---------- CUSTOMER HEADER ----------
     with st.sidebar:
-        img1_path = Path(r"C:\Users\zhaoj\OneDrive\Documents\NUS High 2025\BL6131\Project\AppDemo\image1.png").absolute()
+        img1_path = Path(r"image1.png").absolute()
         img1_base64 = image_to_base64(img1_path)
 
         st.markdown(
@@ -369,7 +369,7 @@ if st.session_state.role == "Customer":
     else:
         st.info("No active deposits at the moment.")
 
-    img2_path = Path(r"C:\Users\zhaoj\OneDrive\Documents\NUS High 2025\BL6131\Project\AppDemo\image2.png").absolute()
+    img2_path = Path(r"image2.png").absolute()
     img2_base64 = image_to_base64(img2_path)
 
     st.markdown(
