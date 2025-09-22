@@ -1,8 +1,10 @@
 import streamlit as st
 import pandas as pd
 import os
+from pathlib import Path
 import random
 import ast
+import base64
 
 # ---------- CSV FILES ----------
 USERS_FILE = "users.csv"
@@ -45,6 +47,10 @@ def init_csv():
 init_csv()
 
 # ---------- HELPERS ----------
+def image_to_base64(path):
+    with open(path, "rb") as f:
+        return base64.b64encode(f.read()).decode()
+
 def load_users():
     df = pd.read_csv(USERS_FILE, dtype=str).applymap(lambda x: x.strip() if isinstance(x, str) else x)
     df["points"] = df["points"].astype(int)
@@ -104,7 +110,19 @@ if "page" not in st.session_state: st.session_state.page = "home"
 
 # ---------- LOGIN ----------
 if st.session_state.role is None:
-    st.title("♻️ Reusable Container App")
+    # Replace title with centralised image
+    img1_path = Path(r"C:\Users\zhaoj\OneDrive\Documents\NUS High 2025\BL6131\Project\AppDemo\image1.png").absolute()
+    img1_base64 = image_to_base64(img1_path)
+
+    st.markdown(
+        f"""
+        <div style="text-align: center;">
+            <img src="data:image/png;base64,{img1_base64}" width="200">
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
     st.subheader("Login")
     with st.form("login_form"):
         phone = st.text_input("Phone").strip()
@@ -142,7 +160,22 @@ if st.session_state.role is None:
                     st.rerun()
                 else:
                     st.error("Invalid restaurant credentials")
+
+    # Add second image below login form
+    img2_path = Path(r"C:\Users\zhaoj\OneDrive\Documents\NUS High 2025\BL6131\Project\AppDemo\image2.png").absolute()
+    img2_base64 = image_to_base64(img2_path)
+
+    st.markdown(
+        f"""
+        <div style="text-align: center;">
+            <img src="data:image/png;base64,{img2_base64}" width="300">
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
     st.stop()
+
 
 # -----------------------
 # ---------- CUSTOMER VIEW ----------
@@ -155,8 +188,21 @@ if st.session_state.role == "Customer":
     orders = load_orders()
     restaurants = load_restaurants()
 
+
+
     # ---------- CUSTOMER HEADER ----------
     with st.sidebar:
+        img1_path = Path(r"C:\Users\zhaoj\OneDrive\Documents\NUS High 2025\BL6131\Project\AppDemo\image1.png").absolute()
+        img1_base64 = image_to_base64(img1_path)
+
+        st.markdown(
+            f"""
+            <div style="text-align: center;">
+                <img src="data:image/png;base64,{img1_base64}" width="300">
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
         st.markdown("## 👤 Customer Info")
         st.markdown(f"**Phone:** `{st.session_state.phone}`")
         if st.button("🚪 Logout", key="logout_sidebar"):
@@ -322,6 +368,18 @@ if st.session_state.role == "Customer":
                 st.write(f"🆔 {c['id']} → ${c['deposit']:.2f}")
     else:
         st.info("No active deposits at the moment.")
+
+    img2_path = Path(r"C:\Users\zhaoj\OneDrive\Documents\NUS High 2025\BL6131\Project\AppDemo\image2.png").absolute()
+    img2_base64 = image_to_base64(img2_path)
+
+    st.markdown(
+        f"""
+        <div style="text-align: center;">
+            <img src="data:image/png;base64,{img2_base64}" width="300">
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 
 # -----------------------
