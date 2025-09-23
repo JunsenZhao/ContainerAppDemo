@@ -389,13 +389,22 @@ if st.session_state.role == "Operator":
     st.header(f"Operator Home ({st.session_state.phone})")
     containers = load_containers()
 
-    # Container summary by status
+    # Container summary by status (horizontal)
     st.subheader("📦 Container Summary")
+    col1, col2, col3, col4 = st.columns(4)
     status_counts = containers["status"].value_counts()
-    for status in ["CLEAN", "DISTRIBUTED", "IN_USE", "RETURNED"]:
-        count = status_counts.get(status, 0)
-        st.metric(f"{status} Containers", count)
+
+    with col1:
+        st.metric("CLEAN", status_counts.get("CLEAN", 0))
+    with col2:
+        st.metric("DISTRIBUTED", status_counts.get("DISTRIBUTED", 0))
+    with col3:
+        st.metric("IN USE", status_counts.get("IN_USE", 0))
+    with col4:
+        st.metric("RETURNED", status_counts.get("RETURNED", 0))
+
     st.divider()
+
 
 
 
