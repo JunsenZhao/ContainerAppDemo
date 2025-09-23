@@ -607,30 +607,49 @@ if st.session_state.role == "Restaurant":
             with st.container(border=True):
                 st.write(f"**Customer:** {order['customer_phone']}")
                 st.write(f"**Order:** {order['order_text']}")
-                num = st.number_input(f"Containers for order {idx}", 1, 5, 1, key=f"cont_{idx}")
+
+                # Show available stock
+                available = containers[
+                    (containers["status"] == "DISTRIBUTED") & 
+                    (containers["owner"] == st.session_state.phone)
+                ]
+
+                if available.empty:
+                    st.warning("No distributed containers in your possession!")
+                    continue
+
+                # Multi-select container IDs
+                chosen = st.multiselect(
+                    f"Select containers for order {idx}",
+                    options=available["id"].tolist(),
+                    key=f"cont_select_{idx}"
+                )
 
                 if st.button(f"✅ Mark Delivered (Order {idx})"):
-                    available = containers[(containers["status"] == "DISTRIBUTED") & 
-                                           (containers["owner"] == st.session_state.phone)].head(num)
-
-                    if len(available) < num:
-                        st.error("Not enough distributed containers in your stock!")
+                    if not chosen:
+                        st.error("Please select at least one container.")
                     else:
-                        for cidx in available.index:
+                        # Update each chosen container
+                        for cid in chosen:
+                            cidx = containers[containers["id"] == cid].index[0]
                             containers.at[cidx, "status"] = "IN_USE"
                             containers.at[cidx, "owner"] = order["customer_phone"]
                             containers.at[cidx, "deposit"] = 5.0
                             history = containers.at[cidx, "history"]
                             history.append(order["customer_phone"])
                             containers.at[cidx, "history"] = history
+
                         save_containers(containers)
+
                         orders.at[idx, "status"] = "DELIVERED"
-                        orders.at[idx, "containers"] = str(num)
+                        orders.at[idx, "containers"] = str(len(chosen))  # store number of containers
                         save_orders(orders)
-                        st.success("Order delivered using your distributed containers!")
+
+                        st.success(f"Delivered order using {len(chosen)} container(s).")
                         st.rerun()
     else:
         st.info("No pending orders.")
+
 
     # ---------- Full Order History Table ----------
     st.subheader("📜 Full Order History")

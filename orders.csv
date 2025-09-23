@@ -6,3 +6,4 @@ customer_phone,restaurant_phone,order_text,status,containers
 ,,,,
 ,,,,
 91234567,80001111,3,DELIVERED,3
+91234567,80001111,2xchicken rice,DELIVERED,2
