@@ -634,7 +634,7 @@ if st.session_state.role == "Restaurant":
                             cidx = containers[containers["id"] == cid].index[0]
                             containers.at[cidx, "status"] = "IN_USE"
                             containers.at[cidx, "owner"] = order["customer_phone"]
-                            containers.at[cidx, "deposit"] = 5.0
+                            containers.at[cidx, "deposit"] = 3.0
                             history = containers.at[cidx, "history"]
                             history.append(order["customer_phone"])
                             containers.at[cidx, "history"] = history
