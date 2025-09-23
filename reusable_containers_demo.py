@@ -372,6 +372,8 @@ if st.session_state.role == "Customer":
     img2_path = Path(r"image2.png").absolute()
     img2_base64 = image_to_base64(img2_path)
 
+    st.divider()
+
     st.markdown(
         f"""
         <div style="text-align: center;">
